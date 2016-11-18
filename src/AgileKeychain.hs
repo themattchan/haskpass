@@ -124,14 +124,14 @@ instance A.FromJSON KeyLevel where
 instance A.FromJSON RawKey where
   parseJSON jsonVal = do
     jsonObj          <- A.withObject "get json object" return jsonVal
-    rawKeyData       <- parseKeyData <$> jsonObj .: "data"
+    rawKeyData       <- parseKeyData $ jsonObj .: "data"
     rawKeyIdentifier <- jsonObj .: "identifier"
-    rawKeyValidation <- parseKeyData <$> jsonObj .: "validation"
+    rawKeyValidation <- parseKeyData $ jsonObj .: "validation"
     rawKeyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
     rawKeyLevel      <- jsonObj .: "level"
     return RawKey{..}
     where
-      parseKeyData = orFail errKeyData <=< decodeEncData . B.pack
+      parseKeyData = (>>= orFail errKeyData) . fmap (decodeEncData . B.pack)
       errKeyData   = "bad key data"
 
 decodeEncData :: B.ByteString -> Maybe DecodedData
@@ -144,7 +144,8 @@ decodeEncData dat
     hasSalt = "Salted__" `B.isPrefixOf` decoded
     salt    = (B.take 8 . B.drop 8) decoded
 
-decryptRawKeyData :: B.ByteString -> RawKey -> M.Map KeyLevel AgileKeychainMasterKey
+decryptRawKeyData :: B.ByteString -> RawKey
+                  -> M.Map KeyLevel AgileKeychainMasterKey
 decryptRawKeyData masterPass RawKey{..} =
   M.singleton rawKeyLevel AgileKeychainMasterKey{..}
   where
@@ -156,8 +157,10 @@ decryptRawKeyData masterPass RawKey{..} =
                   masterPass salt rawKeyIterations masterKeyLength
 
     decryptedKeyData = unsafePerformIO $ SSL.withOpenSSL $ do
-      Just cipherToUse <- SSL.getCipherByName "aes-128-cbc"
-      SSL.cipherBS cipherToUse aesSymmKey aesIv SSL.Decrypt rawData
+      Just aes128cbc <- SSL.getCipherByName "aes-128-cbc"
+      SSL.cipherBS aes128cbc aesSymmKey aesIv SSL.Decrypt rawData
       where
         aesSymmKey = B.take 16 masterKey
         aesIv      = B.drop 16 masterKey
+
+--    validationKeys
