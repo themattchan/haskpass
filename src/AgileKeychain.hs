@@ -76,7 +76,7 @@ data AgileKeychain = AgileKeychain
 
 type ErrorMsg = String
 
-{-@ type Salt = { v :: B.ByteString | bslen v == 8 @-}
+{-@ type Salt = { v :: B.ByteString | bslen v == 8 } @-}
 type Salt = B.ByteString
 type RawKeyData = (Maybe Salt, B.ByteString)
 
@@ -101,7 +101,7 @@ readKeychain kcLoc masterPass =
   where
     keychainFile = kcLoc </> "/data/default/encryptionKeys.js"
 
-    errNoList = "Could not find list of keys in keychain"
+--    errNoList = "Could not find list of keys in keychain"
 
     readRawKeyJson v = do
 --      encKeys <- A.json
@@ -109,11 +109,12 @@ readKeychain kcLoc masterPass =
       parsedKeys <- A.withArray "a single key" (mapM parseOneKey . V.toList) keyList
       return parsedKeys
 
-    parseOneKey :: A.Value -> A.Parser (Maybe (RawKeyData, B.ByteString, B.ByteString, B.ByteString, KeyLevel))
+    parseOneKey :: A.Value -> A.Parser (Maybe (RawKeyData, String, String, Int, KeyLevel))
     parseOneKey jsonVal = runMaybeT $ do
-      keyData       <- MaybeT $ parseEncData <$> jsonVal .: "data"
-      keyId         <- lift $ jsonVal .: "identifier"
-      keyValidation <- lift $ jsonVal .: "validation"
-      keyIterations <- lift $ max 1000 <$> jsonVal .:? "iterations" .!= 0
-      keyLevel      <- MaybeT $ parseKeyLevel <$> jsonVal .: "level"
+      jsonObj       <- lift   $ A.withObject "get json object" return jsonVal
+      keyData       <- MaybeT $ parseEncData . B.pack <$> jsonObj .: "data"
+      keyId         <- lift   $ jsonObj .: "identifier"
+      keyValidation <- lift   $ jsonObj .: "validation"
+      keyIterations <- lift   $ max 1000 <$> jsonObj .:? "iterations" .!= 0
+      keyLevel      <- MaybeT $ parseKeyLevel <$> jsonObj .: "level"
       return (keyData, keyId, keyValidation, keyIterations, keyLevel)
