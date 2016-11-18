@@ -6,14 +6,14 @@ just so I don't have to deal with C++.
 
 # Building
 
-1. Install dependencies
+Install dependencies
 
 ```
 sudo dnf install gtk2-devel gtksourceview2-devel glib2-devel ghc-gtk-devel
 stack install gtk2hs-buildtools
 ```
 
-2. Build
+Build
 
 ```
 stack build
