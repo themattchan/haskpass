@@ -19,8 +19,10 @@ library
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , vector
+                     , fail
                      , transformers
                      , bytestring
+                     , text
                      , filepath
                      , gtk
                      , HsOpenSSL

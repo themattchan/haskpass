@@ -1,13 +1,18 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE LambdaCase        #-}
 
 module AgileKeychain where
 
+import Control.Arrow ((>>>))
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
 
+import Data.Maybe
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -23,13 +28,13 @@ import qualified OpenSSL.EVP.Digest as SSL (pkcs5_pbkdf2_hmac_sha1)
 
 import qualified Network.URL as URL
 
+
+import Utils
 --import Data.Attoparsec.ByteString
 
 --------------------------------------------------------------------------------
 -- * Types
 --------------------------------------------------------------------------------
-
-type ErrorMsg = String
 
 data KeyLevel = SL3 | SL5
   deriving (Show,Eq, Bounded, Enum)
@@ -94,27 +99,38 @@ readKeychain kcLoc masterPass =
 
 --    errNoList = "Could not find list of keys in keychain"
 
-    readRawKeyJson v = do
---      encKeys <- A.json
-      keyList <- A.withObject "list of keys" (.: "list") v
-      parsedKeys <- A.withArray "a single key" (mapM parseOneKey . V.toList) keyList
-      return parsedKeys
+instance A.FromJSON [RawKeyData] where
+  parseJSON v = do
+    keyList    <- A.withObject "list of keys" (.: "list") v
+    parsedKeys <- A.withArray "a single key" (mapM A.parseJSON . V.toList) keyList
+    return parsedKeys
 
 
-parseKeyLevel :: String -> Maybe KeyLevel
-parseKeyLevel "SL3" = Just SL3
-parseKeyLevel "SL5" = Just SL5
-parseKeyLevel _     = Nothing
+instance A.FromJSON KeyLevel where
+  parseJSON =
+    A.withText "" (\case
+                      "SL3" -> return SL3
+                      "SL5" -> return SL5
+                      _     -> fail "cannot parse key level")
 
-parseOneKey :: A.Value -> A.Parser (Maybe RawKeyData)
-parseOneKey jsonVal = runMaybeT $ do
-  jsonObj       <- lift   $ A.withObject "get json object" return jsonVal
-  keyData       <- MaybeT $ decodeEncData . B.pack <$> jsonObj .: "data"
-  keyId         <- lift   $ jsonObj .: "identifier"
-  keyValidation <- lift   $ jsonObj .: "validation"
-  keyIterations <- lift   $ max 1000 <$> jsonObj .:? "iterations" .!= 0
-  keyLevel      <- MaybeT $ parseKeyLevel <$> jsonObj .: "level"
-  return $ RawKeyData(keyData, keyId, keyValidation, keyIterations, keyLevel)
+-- parseKeyLevel :: String -> Maybe KeyLevel
+-- parseKeyLevel "SL3" = Just SL3
+-- parseKeyLevel "SL5" = Just SL5
+-- parseKeyLevel _     = Nothing
+
+
+instance A.FromJSON RawKeyData where
+  parseJSON jsonVal = do
+    jsonObj       <- A.withObject "get json object" return jsonVal
+    keyData       <- decodeEncData . B.pack <$> jsonObj .: "data" >>= orFail errKeyData
+    keyId         <- jsonObj .: "identifier"
+    keyValidation <- jsonObj .: "validation"
+    keyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
+    keyLevel      <- jsonObj .: "level"
+    return $ RawKeyData(keyData, keyId, keyValidation, keyIterations, keyLevel)
+    where
+      errKeyData  = "bad key data"
+      errKeyLevel = "bad key level"
 
 decodeEncData :: B.ByteString -> Maybe DecodedData
 decodeEncData dat
