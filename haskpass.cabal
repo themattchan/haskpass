@@ -3,7 +3,7 @@ version:             0.1.0.0
 synopsis:            1password client for linux
 description:         Please see README.md
 homepage:            https://github.com/themattchan/haskpass#readme
-license:             BSD3
+license:             MIT
 license-file:        LICENSE
 author:              Matthew Chan
 maintainer:          matt@parametri.city
@@ -18,11 +18,13 @@ library
   exposed-modules:     Lib
   build-depends:       base >= 4.7 && < 5
                      , containers
+                     , vector
                      , transformers
                      , bytestring
                      , filepath
                      , gtk
                      , HsOpenSSL
+                     , attoparsec
                      , aeson
                      , url
   default-language:    Haskell2010
