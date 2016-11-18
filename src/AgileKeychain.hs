@@ -107,11 +107,12 @@ readKeychain kcLoc masterPass =
     keychainFile = kcLoc </> "/data/default/encryptionKeys.js"
 
 instance A.FromJSON [RawKey] where
-  parseJSON  =  A.withObject "list of keys" (.: "list")
-            >=> A.withArray  "a single key" (mapM A.parseJSON . V.toList)
+  parseJSON
+    =  A.withObject "list of keys" (.: "list")
+   >=> A.withArray  "a single key" (mapM A.parseJSON . V.toList)
 
 instance A.FromJSON KeyLevel where
-  parseJSON = A.withText ""
+  parseJSON = A.withText "key level"
     (\case
         "SL3" -> return SL3
         "SL5" -> return SL5
