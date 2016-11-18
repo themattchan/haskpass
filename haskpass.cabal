@@ -25,6 +25,7 @@ library
                      , text
                      , filepath
                      , gtk
+--                     , glade
                      , HsOpenSSL
                      , attoparsec
                      , aeson

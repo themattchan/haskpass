@@ -9,6 +9,7 @@ import Control.Arrow ((>>>))
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.RWS
 
 import Data.Maybe
 import Data.Monoid
@@ -29,7 +30,8 @@ import Data.Aeson ((.:), (.:?), (.!=))
 import qualified OpenSSL            as SSL (withOpenSSL)
 import qualified OpenSSL.EVP.Base64 as SSL (decodeBase64BS)
 import qualified OpenSSL.EVP.Digest as SSL (pkcs5_pbkdf2_hmac_sha1)
-import qualified OpenSSL.EVP.Cipher as SSL (Cipher(..), CryptoMode(..), getCipherByName, cipherBS)
+import qualified OpenSSL.EVP.Cipher as SSL (Cipher(..), CryptoMode(..),
+                                            getCipherByName, cipherBS)
 
 import qualified Network.URL as URL
 
@@ -82,8 +84,13 @@ data AgileKeychain = AgileKeychain
   { ak_vaultTitle :: String
   , ak_vaultPath  :: FilePath
   , ak_masterKeys :: M.Map KeyLevel AgileKeychainMasterKey
-  , ak_items      :: S.Set AgileKeychainItem
+--  , ak_masterPassword :: String
+--  , ak_items      :: S.Set AgileKeychainItem
   } deriving (Show)
+
+type AgileKeychainT m = RWST AgileKeychain () (S.Set AgileKeychainItem) m
+
+type AgileKeychainM = AgileKeychainT IO
 
 {-@ type Salt = { v :: B.ByteString | bslen v == 8 } @-}
 type Salt = B.ByteString
@@ -145,9 +152,11 @@ decodeEncData dat
     salt    = (B.take 8 . B.drop 8) decoded
 
 decryptRawKeyData :: B.ByteString -> RawKey
-                  -> M.Map KeyLevel AgileKeychainMasterKey
-decryptRawKeyData masterPass RawKey{..} =
-  M.singleton rawKeyLevel AgileKeychainMasterKey{..}
+                  -> IO (Maybe (M.Map KeyLevel AgileKeychainMasterKey))
+decryptRawKeyData masterPass RawKey{..} = SSL.withOpenSSL $ do
+  Just aes128cbc <- SSL.getCipherByName "aes-128-cbc"
+  decrypted <- decryptedKeyData aes128cbc
+  return $ M.singleton rawKeyLevel AgileKeychainMasterKey{..}
   where
     (rawSalt, rawData) = rawKeyData
     salt      = fromMaybe mempty rawSalt
@@ -156,9 +165,8 @@ decryptRawKeyData masterPass RawKey{..} =
     masterKey = SSL.pkcs5_pbkdf2_hmac_sha1
                   masterPass salt rawKeyIterations masterKeyLength
 
-    decryptedKeyData = unsafePerformIO $ SSL.withOpenSSL $ do
-      Just aes128cbc <- SSL.getCipherByName "aes-128-cbc"
-      SSL.cipherBS aes128cbc aesSymmKey aesIv SSL.Decrypt rawData
+    decryptedKeyData algo =
+      SSL.cipherBS algo aesSymmKey aesIv SSL.Decrypt rawData
       where
         aesSymmKey = B.take 16 masterKey
         aesIv      = B.drop 16 masterKey
