@@ -6,6 +6,7 @@
 module AgileKeychain where
 
 import Control.Arrow ((>>>))
+import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
 
@@ -87,7 +88,7 @@ type Salt = B.ByteString
 type DecodedData = (Maybe Salt, B.ByteString)
 
 -- | A single undecrypted key entry in the list from 'encryptedKeys.js'
-data RawKeyData = RawKeyData
+data RawKey = RawKey
   { rawKeyData       :: DecodedData
   , rawKeyIdentifier :: String
   , rawKeyValidation :: String
@@ -99,17 +100,15 @@ data RawKeyData = RawKeyData
 -- * Keychain parsing
 --------------------------------------------------------------------------------
 
-readKeychain :: FilePath -> IO (Maybe AgileKeychain)
+readKeychain :: FilePath -> String ->  IO (Maybe AgileKeychain)
 readKeychain kcLoc masterPass =
   undefined <$> B.readFile keychainFile
   where
     keychainFile = kcLoc </> "/data/default/encryptionKeys.js"
 
-instance A.FromJSON [RawKeyData] where
-  parseJSON v = do
-    keyList    <- A.withObject "list of keys" (.: "list") v
-    parsedKeys <- A.withArray "a single key" (mapM A.parseJSON . V.toList) keyList
-    return parsedKeys
+instance A.FromJSON [RawKey] where
+  parseJSON  =  A.withObject "list of keys" (.: "list")
+            >=> A.withArray  "a single key" (mapM A.parseJSON . V.toList)
 
 instance A.FromJSON KeyLevel where
   parseJSON = A.withText ""
@@ -118,7 +117,7 @@ instance A.FromJSON KeyLevel where
         "SL5" -> return SL5
         _     -> fail "cannot parse key level")
 
-instance A.FromJSON RawKeyData where
+instance A.FromJSON RawKey where
   parseJSON jsonVal = do
     jsonObj          <- A.withObject "get json object" return jsonVal
     rawKeyData       <- orFail errKeyData =<< decodeEncData . B.pack <$> jsonObj .: "data"
@@ -126,7 +125,7 @@ instance A.FromJSON RawKeyData where
     rawKeyValidation <- jsonObj .: "validation"
     rawKeyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
     rawKeyLevel      <- jsonObj .: "level"
-    return RawKeyData{..}
+    return RawKey{..}
     where
       errKeyData  = "bad key data"
 
@@ -140,6 +139,6 @@ decodeEncData dat
     hasSalt = "Salted__" `B.isPrefixOf` decoded
     salt    = (B.take 8 . B.drop 8) decoded
 
-decryptRawKeyData :: String -> RawKeyData -> AgileKeychainMasterKey
-decryptRawKeyData masterPass RawKeyData{..} =
+decryptRawKeyData :: String -> RawKey -> AgileKeychainMasterKey
+decryptRawKeyData masterPass RawKey{..} =
   undefined
