@@ -66,6 +66,7 @@ data AgileKeychainItem = AgileKeychainItem
   , notes     :: String
   } deriving (Show)
 
+-- | A decrypted master key
 data AgileKeychainMasterKey = AgileKeychainMasterKey
   { mk_level :: KeyLevel
   , mk_id    :: UUID
@@ -85,7 +86,14 @@ type Salt = B.ByteString
 
 type DecodedData = (Maybe Salt, B.ByteString)
 
-newtype RawKeyData = RawKeyData (DecodedData, String, String, Int, KeyLevel)
+-- | A single undecrypted key entry in the list from 'encryptedKeys.js'
+data RawKeyData = RawKeyData
+  { rawKeyData       :: DecodedData
+  , rawKeyIdentifier :: String
+  , rawKeyValidation :: String
+  , rawKeyIterations :: Int
+  , rawKeyLevel      :: KeyLevel
+  } deriving Show
 
 --------------------------------------------------------------------------------
 -- * Keychain parsing
@@ -112,16 +120,15 @@ instance A.FromJSON KeyLevel where
 
 instance A.FromJSON RawKeyData where
   parseJSON jsonVal = do
-    jsonObj       <- A.withObject "get json object" return jsonVal
-    keyData       <- orFail errKeyData =<< decodeEncData . B.pack <$> jsonObj .: "data"
-    keyId         <- jsonObj .: "identifier"
-    keyValidation <- jsonObj .: "validation"
-    keyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
-    keyLevel      <- jsonObj .: "level"
-    return $ RawKeyData(keyData, keyId, keyValidation, keyIterations, keyLevel)
+    jsonObj          <- A.withObject "get json object" return jsonVal
+    rawKeyData       <- orFail errKeyData =<< decodeEncData . B.pack <$> jsonObj .: "data"
+    rawKeyIdentifier <- jsonObj .: "identifier"
+    rawKeyValidation <- jsonObj .: "validation"
+    rawKeyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
+    rawKeyLevel      <- jsonObj .: "level"
+    return RawKeyData{..}
     where
       errKeyData  = "bad key data"
-      errKeyLevel = "bad key level"
 
 decodeEncData :: B.ByteString -> Maybe DecodedData
 decodeEncData dat
@@ -132,3 +139,7 @@ decodeEncData dat
     decoded = SSL.decodeBase64BS dat
     hasSalt = "Salted__" `B.isPrefixOf` decoded
     salt    = (B.take 8 . B.drop 8) decoded
+
+decryptRawKeyData :: String -> RawKeyData -> AgileKeychainMasterKey
+decryptRawKeyData masterPass RawKeyData{..} =
+  undefined
