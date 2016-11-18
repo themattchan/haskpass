@@ -11,6 +11,7 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
 
 import Data.Maybe
+import Data.Monoid
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as T
@@ -26,6 +27,7 @@ import Data.Aeson ((.:), (.:?), (.!=))
 
 import qualified OpenSSL.EVP.Base64 as SSL (decodeBase64BS)
 import qualified OpenSSL.EVP.Digest as SSL (pkcs5_pbkdf2_hmac_sha1)
+import qualified OpenSSL.EVP.Cipher as SSL (cipherBS, CryptoMode(..), Cipher(..))
 
 import qualified Network.URL as URL
 
@@ -69,7 +71,7 @@ data AgileKeychainItem = AgileKeychainItem
 
 -- | A decrypted master key
 data AgileKeychainMasterKey = AgileKeychainMasterKey
-  { mk_level :: KeyLevel
+  { mk_level :: KeyLevel -- this is redundant
   , mk_id    :: UUID
   , mk_data  :: B.ByteString
   } deriving (Show, Eq)
@@ -77,8 +79,7 @@ data AgileKeychainMasterKey = AgileKeychainMasterKey
 data AgileKeychain = AgileKeychain
   { ak_vaultTitle :: String
   , ak_vaultPath  :: FilePath
-  , ak_level3Key  :: AgileKeychainMasterKey
-  , ak_level5Key  :: AgileKeychainMasterKey
+  , ak_masterKeys :: M.Map KeyLevel AgileKeychainMasterKey
   , ak_items      :: S.Set AgileKeychainItem
   } deriving (Show)
 
@@ -140,6 +141,19 @@ decodeEncData dat
     hasSalt = "Salted__" `B.isPrefixOf` decoded
     salt    = (B.take 8 . B.drop 8) decoded
 
-decryptRawKeyData :: String -> RawKey -> AgileKeychainMasterKey
+decryptRawKeyData :: B.ByteString -> RawKey -> M.Map KeyLevel AgileKeychainMasterKey
 decryptRawKeyData masterPass RawKey{..} =
-  undefined
+  M.Singleton rawKeyLevel AgileKeychainMasterKey{..}
+  where
+    (rawSalt, rawData) = rawKeyData
+    salt      = fromMaybe mempty rawSalt
+
+    masterKeyLength = 32
+    masterKey = SSL.pkcs5_pbkdf2_hmac_sha1
+                  masterPass salt rawKeyIterations masterKeyLength
+
+    decryptedKeyData =
+      unsafePerformIO $ SSL.cipherBS cipherToUse aesSymmKey aesIv SSL.Decrypt rawData
+      where
+        aesSymmKey = B.take 16 masterKey
+        aesIv  = B.drop 16 masterKey
