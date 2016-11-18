@@ -20,14 +20,16 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 
 import System.FilePath
+import System.IO.Unsafe
 
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Types as A
 import Data.Aeson ((.:), (.:?), (.!=))
 
+import qualified OpenSSL            as SSL (withOpenSSL)
 import qualified OpenSSL.EVP.Base64 as SSL (decodeBase64BS)
 import qualified OpenSSL.EVP.Digest as SSL (pkcs5_pbkdf2_hmac_sha1)
-import qualified OpenSSL.EVP.Cipher as SSL (cipherBS, CryptoMode(..), Cipher(..))
+import qualified OpenSSL.EVP.Cipher as SSL (Cipher(..), CryptoMode(..), getCipherByName, cipherBS)
 
 import qualified Network.URL as URL
 
@@ -92,7 +94,7 @@ type DecodedData = (Maybe Salt, B.ByteString)
 data RawKey = RawKey
   { rawKeyData       :: DecodedData
   , rawKeyIdentifier :: String
-  , rawKeyValidation :: String
+  , rawKeyValidation :: DecodedData
   , rawKeyIterations :: Int
   , rawKeyLevel      :: KeyLevel
   } deriving Show
@@ -122,14 +124,15 @@ instance A.FromJSON KeyLevel where
 instance A.FromJSON RawKey where
   parseJSON jsonVal = do
     jsonObj          <- A.withObject "get json object" return jsonVal
-    rawKeyData       <- orFail errKeyData =<< decodeEncData . B.pack <$> jsonObj .: "data"
+    rawKeyData       <- parseKeyData <$> jsonObj .: "data"
     rawKeyIdentifier <- jsonObj .: "identifier"
-    rawKeyValidation <- jsonObj .: "validation"
+    rawKeyValidation <- parseKeyData <$> jsonObj .: "validation"
     rawKeyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
     rawKeyLevel      <- jsonObj .: "level"
     return RawKey{..}
     where
-      errKeyData  = "bad key data"
+      parseKeyData = orFail errKeyData <=< decodeEncData . B.pack
+      errKeyData   = "bad key data"
 
 decodeEncData :: B.ByteString -> Maybe DecodedData
 decodeEncData dat
@@ -143,7 +146,7 @@ decodeEncData dat
 
 decryptRawKeyData :: B.ByteString -> RawKey -> M.Map KeyLevel AgileKeychainMasterKey
 decryptRawKeyData masterPass RawKey{..} =
-  M.Singleton rawKeyLevel AgileKeychainMasterKey{..}
+  M.singleton rawKeyLevel AgileKeychainMasterKey{..}
   where
     (rawSalt, rawData) = rawKeyData
     salt      = fromMaybe mempty rawSalt
@@ -152,8 +155,9 @@ decryptRawKeyData masterPass RawKey{..} =
     masterKey = SSL.pkcs5_pbkdf2_hmac_sha1
                   masterPass salt rawKeyIterations masterKeyLength
 
-    decryptedKeyData =
-      unsafePerformIO $ SSL.cipherBS cipherToUse aesSymmKey aesIv SSL.Decrypt rawData
+    decryptedKeyData = unsafePerformIO $ SSL.withOpenSSL $ do
+      Just cipherToUse <- SSL.getCipherByName "aes-128-cbc"
+      SSL.cipherBS cipherToUse aesSymmKey aesIv SSL.Decrypt rawData
       where
         aesSymmKey = B.take 16 masterKey
-        aesIv  = B.drop 16 masterKey
+        aesIv      = B.drop 16 masterKey
