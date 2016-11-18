@@ -91,13 +91,11 @@ newtype RawKeyData = RawKeyData (DecodedData, String, String, Int, KeyLevel)
 -- * Keychain parsing
 --------------------------------------------------------------------------------
 
--- readKeychain :: FilePath -> IO (Either ErrorMsg AgileKeychain)
+readKeychain :: FilePath -> IO (Maybe AgileKeychain)
 readKeychain kcLoc masterPass =
   undefined <$> B.readFile keychainFile
   where
     keychainFile = kcLoc </> "/data/default/encryptionKeys.js"
-
---    errNoList = "Could not find list of keys in keychain"
 
 instance A.FromJSON [RawKeyData] where
   parseJSON v = do
@@ -105,24 +103,17 @@ instance A.FromJSON [RawKeyData] where
     parsedKeys <- A.withArray "a single key" (mapM A.parseJSON . V.toList) keyList
     return parsedKeys
 
-
 instance A.FromJSON KeyLevel where
-  parseJSON =
-    A.withText "" (\case
-                      "SL3" -> return SL3
-                      "SL5" -> return SL5
-                      _     -> fail "cannot parse key level")
-
--- parseKeyLevel :: String -> Maybe KeyLevel
--- parseKeyLevel "SL3" = Just SL3
--- parseKeyLevel "SL5" = Just SL5
--- parseKeyLevel _     = Nothing
-
+  parseJSON = A.withText ""
+    (\case
+        "SL3" -> return SL3
+        "SL5" -> return SL5
+        _     -> fail "cannot parse key level")
 
 instance A.FromJSON RawKeyData where
   parseJSON jsonVal = do
     jsonObj       <- A.withObject "get json object" return jsonVal
-    keyData       <- decodeEncData . B.pack <$> jsonObj .: "data" >>= orFail errKeyData
+    keyData       <- orFail errKeyData =<< decodeEncData . B.pack <$> jsonObj .: "data"
     keyId         <- jsonObj .: "identifier"
     keyValidation <- jsonObj .: "validation"
     keyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
