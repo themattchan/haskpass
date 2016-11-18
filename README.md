@@ -4,7 +4,7 @@ haskpass is a 1Password client for Linux, inspired
 by and mostly a clone of [gonepass](https://github.com/themattchan/gonepass),
 just so I don't have to deal with C++.
 
-# Building
+### Building
 
 Install dependencies
 
