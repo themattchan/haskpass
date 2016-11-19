@@ -24,9 +24,11 @@ library
                      , bytestring
                      , text
                      , filepath
+                     , directory
                      , gtk
 --                     , glade
                      , HsOpenSSL
+                     , hopenssl
                      , attoparsec
                      , aeson
                      , url

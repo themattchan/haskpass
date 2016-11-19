@@ -13,6 +13,8 @@ import Control.Monad.Trans.RWS
 
 import Data.Maybe
 import Data.Monoid
+import Data.Foldable
+import Data.Traversable
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as T
@@ -20,18 +22,25 @@ import qualified Data.Vector as V
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 
+import System.Directory
 import System.FilePath
 import System.IO.Unsafe
 
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Types as A
 import Data.Aeson ((.:), (.:?), (.!=))
+import qualified Data.Attoparsec as AP
 
-import qualified OpenSSL            as SSL (withOpenSSL)
-import qualified OpenSSL.EVP.Base64 as SSL (decodeBase64BS)
-import qualified OpenSSL.EVP.Digest as SSL (pkcs5_pbkdf2_hmac_sha1)
-import qualified OpenSSL.EVP.Cipher as SSL (Cipher(..), CryptoMode(..),
-                                            getCipherByName, cipherBS)
+import qualified OpenSSL              as SSL
+  (withOpenSSL)
+import qualified OpenSSL.EVP.Base64   as SSL
+  (decodeBase64BS)
+import qualified OpenSSL.EVP.Internal as SSL
+  (digestStrictly, digestUpdateBS, digestFinalBS)
+import qualified OpenSSL.EVP.Digest   as SSL
+  (pkcs5_pbkdf2_hmac_sha1, getDigestByName)
+import qualified OpenSSL.EVP.Cipher   as SSL
+  (Cipher(..), CryptoMode(..), getCipherByName, cipherBS)
 
 import qualified Network.URL as URL
 
@@ -44,7 +53,7 @@ import Utils
 --------------------------------------------------------------------------------
 
 data KeyLevel = SL3 | SL5
-  deriving (Show,Eq, Bounded, Enum)
+  deriving (Show,Eq, Bounded, Enum, Ord)
 
 newtype UUID
   = UUID { getUUID :: String }
@@ -83,7 +92,8 @@ data AgileKeychainMasterKey = AgileKeychainMasterKey
 data AgileKeychain = AgileKeychain
   { ak_vaultTitle :: String
   , ak_vaultPath  :: FilePath
-  , ak_masterKeys :: M.Map KeyLevel AgileKeychainMasterKey
+  , ak_level3Key :: AgileKeychainMasterKey
+  , ak_level5Key :: AgileKeychainMasterKey
 --  , ak_masterPassword :: String
 --  , ak_items      :: S.Set AgileKeychainItem
   } deriving (Show)
@@ -110,11 +120,26 @@ data RawKey = RawKey
 -- * Keychain parsing
 --------------------------------------------------------------------------------
 
-readKeychain :: FilePath -> String ->  IO (Maybe AgileKeychain)
-readKeychain kcLoc masterPass =
-  undefined <$> B.readFile keychainFile
+readKeychain :: FilePath -> B.ByteString ->  IO (Maybe AgileKeychain)
+readKeychain ak_vaultPath masterPass = do
+  putStrLn keychainFile
+  getCurrentDirectory  >>= putStrLn
+  rawEncryptionKeysJs <- B.readFile keychainFile
+  print  rawEncryptionKeysJs
+  let mRawJson = AP.maybeResult . AP.parse A.json $ rawEncryptionKeysJs
+  case mRawJson >>= A.parseMaybe A.parseJSON :: Maybe [RawKey] of
+    Just rawKeys -> do
+      print rawKeys
+      masterKeys <- fold <$> mapM (decryptRawKeyData masterPass) rawKeys
+      let ak_level5Key = masterKeys M.! SL5
+          ak_level3Key = masterKeys M.! SL3
+      return $ Just $ AgileKeychain{..}
+    _ -> do
+      putStrLn "fail"
+      return Nothing
   where
-    keychainFile = kcLoc </> "/data/default/encryptionKeys.js"
+    ak_vaultTitle = "vault"
+    keychainFile = ak_vaultPath </> "data/default/encryptionKeys.js"
 
 instance A.FromJSON [RawKey] where
   parseJSON
@@ -152,23 +177,47 @@ decodeEncData dat
     salt    = (B.take 8 . B.drop 8) decoded
 
 decryptRawKeyData :: B.ByteString -> RawKey
-                  -> IO (Maybe (M.Map KeyLevel AgileKeychainMasterKey))
+                  -> IO (M.Map KeyLevel AgileKeychainMasterKey)
 decryptRawKeyData masterPass RawKey{..} = SSL.withOpenSSL $ do
-  Just aes128cbc <- SSL.getCipherByName "aes-128-cbc"
-  decrypted <- decryptedKeyData aes128cbc
-  return $ M.singleton rawKeyLevel AgileKeychainMasterKey{..}
+  Just aes128cbc  <- SSL.getCipherByName "aes-128-cbc"
+  decryptedKey    <- decryptKey aes128cbc
+  (valKey, valIv) <- getValidationKeys decryptedKey
+  validation      <- SSL.cipherBS aes128cbc valKey valIv SSL.Decrypt valData
+  if (decryptedKey == validation) then
+    return $ M.singleton rawKeyLevel
+      (AgileKeychainMasterKey rawKeyLevel (UUID rawKeyIdentifier) decryptedKey)
+  else
+    return M.empty
   where
     (rawSalt, rawData) = rawKeyData
-    salt      = fromMaybe mempty rawSalt
+    (valSalt, valData) = rawKeyValidation
+    salt               = fromMaybe mempty rawSalt
 
     masterKeyLength = 32
+
     masterKey = SSL.pkcs5_pbkdf2_hmac_sha1
                   masterPass salt rawKeyIterations masterKeyLength
 
-    decryptedKeyData algo =
+    decryptKey algo =
       SSL.cipherBS algo aesSymmKey aesIv SSL.Decrypt rawData
       where
         aesSymmKey = B.take 16 masterKey
         aesIv      = B.drop 16 masterKey
 
---    validationKeys
+    getValidationKeys decryptedPass = do
+      Just md5 <-  SSL.getDigestByName "MD5"
+      ctx1 <- SSL.digestStrictly md5 decryptedPass
+      when (isJust valSalt) $ do
+        SSL.digestUpdateBS ctx1 (fromJust valSalt)
+      keyOut <- SSL.digestFinalBS ctx1
+
+      ivOut <- case valSalt of
+        Just salt -> do
+          ctx2 <- SSL.digestStrictly md5 (B.take 16 keyOut)
+          SSL.digestUpdateBS ctx2 decryptedPass
+          SSL.digestUpdateBS ctx2 salt
+          ivOut <- SSL.digestFinalBS ctx2
+          return ivOut
+        Nothing -> return mempty
+
+      return (keyOut, ivOut)
