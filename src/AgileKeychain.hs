@@ -55,6 +55,13 @@ import Utils
 data KeyLevel = SL3 | SL5
   deriving (Show,Eq, Bounded, Enum, Ord)
 
+instance A.FromJSON KeyLevel where
+  parseJSON = A.withText "key level"
+    (\case
+        "SL3" -> return SL3
+        "SL5" -> return SL5
+        _     -> fail "cannot parse key level")
+
 newtype UUID
   = UUID { getUUID :: String }
   deriving (Show, Eq)
@@ -116,6 +123,19 @@ data RawKey = RawKey
   , rawKeyLevel      :: KeyLevel
   } deriving Show
 
+instance A.FromJSON RawKey where
+  parseJSON jsonVal = do
+    jsonObj          <- A.withObject "get json object" return jsonVal
+    rawKeyData       <- parseKeyData $ jsonObj .: "data"
+    rawKeyIdentifier <- jsonObj .: "identifier"
+    rawKeyValidation <- parseKeyData $ jsonObj .: "validation"
+    rawKeyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
+    rawKeyLevel      <- jsonObj .: "level"
+    return RawKey{..}
+    where
+      parseKeyData = (>>= orFail errKeyData) . fmap (decodeEncData . B.pack)
+      errKeyData   = "bad key data"
+
 --------------------------------------------------------------------------------
 -- * Keychain parsing
 --------------------------------------------------------------------------------
@@ -140,31 +160,6 @@ readKeychain ak_vaultPath masterPass = do
   where
     ak_vaultTitle = "vault"
     keychainFile = ak_vaultPath </> "data/default/encryptionKeys.js"
-
-instance A.FromJSON [RawKey] where
-  parseJSON
-    =  A.withObject "list of keys" (.: "list")
-   >=> A.withArray  "a single key" (mapM A.parseJSON . V.toList)
-
-instance A.FromJSON KeyLevel where
-  parseJSON = A.withText "key level"
-    (\case
-        "SL3" -> return SL3
-        "SL5" -> return SL5
-        _     -> fail "cannot parse key level")
-
-instance A.FromJSON RawKey where
-  parseJSON jsonVal = do
-    jsonObj          <- A.withObject "get json object" return jsonVal
-    rawKeyData       <- parseKeyData $ jsonObj .: "data"
-    rawKeyIdentifier <- jsonObj .: "identifier"
-    rawKeyValidation <- parseKeyData $ jsonObj .: "validation"
-    rawKeyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
-    rawKeyLevel      <- jsonObj .: "level"
-    return RawKey{..}
-    where
-      parseKeyData = (>>= orFail errKeyData) . fmap (decodeEncData . B.pack)
-      errKeyData   = "bad key data"
 
 decodeEncData :: B.ByteString -> Maybe DecodedData
 decodeEncData dat

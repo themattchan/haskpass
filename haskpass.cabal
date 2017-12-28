@@ -15,7 +15,8 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Lib
+  exposed-modules:     AgileKeychain, Lib
+  other-modules:       Utils
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , vector
@@ -25,10 +26,10 @@ library
                      , text
                      , filepath
                      , directory
-                     , gtk
+--                     , gtk
 --                     , glade
                      , HsOpenSSL
-                     , hopenssl
+--                     , hopenssl
                      , attoparsec
                      , aeson
                      , url
@@ -48,6 +49,10 @@ test-suite haskpass-test
   main-is:             Spec.hs
   build-depends:       base
                      , haskpass
+                     , tasty
+                     , tasty-hunit
+                     , tasty-quickcheck
+                     , QuickCheck
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 
