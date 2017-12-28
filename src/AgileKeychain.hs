@@ -2,12 +2,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module AgileKeychain where
 
 import Control.Arrow ((>>>))
 import Control.Monad
 import Control.Monad.Trans.Class
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.RWS
 
@@ -47,6 +49,7 @@ import qualified Network.URL as URL
 
 import Utils
 --import Data.Attoparsec.ByteString
+import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- * Types
@@ -124,8 +127,7 @@ data RawKey = RawKey
   } deriving Show
 
 instance A.FromJSON RawKey where
-  parseJSON jsonVal = do
-    jsonObj          <- A.withObject "get json object" return jsonVal
+  parseJSON = A.withObject "get json object" $ \jsonObj -> do
     rawKeyData       <- parseKeyData $ jsonObj .: "data"
     rawKeyIdentifier <- jsonObj .: "identifier"
     rawKeyValidation <- parseKeyData $ jsonObj .: "validation"
@@ -136,27 +138,36 @@ instance A.FromJSON RawKey where
       parseKeyData = (>>= orFail errKeyData) . fmap (decodeEncData . B.pack)
       errKeyData   = "bad key data"
 
+  parseJSONList
+      =  A.withObject "list of keys" (.: "list")
+     >=> A.withArray  "a single key" (mapM A.parseJSON . V.toList)
+
 --------------------------------------------------------------------------------
 -- * Keychain parsing
 --------------------------------------------------------------------------------
 
-readKeychain :: FilePath -> B.ByteString ->  IO (Maybe AgileKeychain)
-readKeychain ak_vaultPath masterPass = do
-  putStrLn keychainFile
-  getCurrentDirectory  >>= putStrLn
-  rawEncryptionKeysJs <- B.readFile keychainFile
-  print  rawEncryptionKeysJs
-  let mRawJson = AP.maybeResult . AP.parse A.json $ rawEncryptionKeysJs
-  case mRawJson >>= A.parseMaybe A.parseJSON :: Maybe [RawKey] of
-    Just rawKeys -> do
-      print rawKeys
-      masterKeys <- fold <$> mapM (decryptRawKeyData masterPass) rawKeys
-      let ak_level5Key = masterKeys M.! SL5
-          ak_level3Key = masterKeys M.! SL3
-      return $ Just $ AgileKeychain{..}
-    _ -> do
-      putStrLn "fail"
-      return Nothing
+readKeychain :: FilePath -> B.ByteString -> IO (Maybe AgileKeychain)
+readKeychain ak_vaultPath masterPass = runMaybeT $ do
+  liftIO $ putStrLn keychainFile
+  liftIO $ getCurrentDirectory  >>= putStrLn
+  rawJson <- MaybeT $ AP.maybeResult . AP.parse A.json <$> B.readFile keychainFile
+  raw :: [RawKey] <- MaybeT . return . A.parseMaybe A.parseJSONList $ rawJson
+  traceShowM raw
+  return undefined
+--   $ rawEncryptionKeysJs
+
+-- --      keyList
+--   case mRawJson >>= A.parseMaybe A.parseJSONList :: Maybe [RawKey] of
+--     Just rawKeys -> do
+--       traceShowM rawKeys
+--       masterKeys <- fold <$> mapM (decryptRawKeyData masterPass) rawKeys
+--       let ak_level5Key = masterKeys M.! SL5
+--           ak_level3Key = masterKeys M.! SL3
+--       return $ Just $ AgileKeychain{..}
+--     _ -> do
+--       putStrLn "fail"
+--       return Nothing
+
   where
     ak_vaultTitle = "vault"
     keychainFile = ak_vaultPath </> "data/default/encryptionKeys.js"
@@ -167,7 +178,7 @@ decodeEncData dat
   | hasSalt              = Just (Just salt, B.drop 16 decoded)
   | otherwise            = Just (Nothing, decoded)
   where
-    decoded = SSL.decodeBase64BS dat
+    !decoded = SSL.decodeBase64BS dat
     hasSalt = "Salted__" `B.isPrefixOf` decoded
     salt    = (B.take 8 . B.drop 8) decoded
 

@@ -22,6 +22,7 @@ library
                      , vector
                      , fail
                      , transformers
+                     , mtl
                      , bytestring
                      , text
                      , filepath
@@ -53,6 +54,7 @@ test-suite haskpass-test
                      , tasty-hunit
                      , tasty-quickcheck
                      , QuickCheck
+                     , aeson
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 

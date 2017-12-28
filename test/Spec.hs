@@ -1,13 +1,25 @@
 {-# LANGUAGE OverloadedStrings #-}
 
---import Test.Tasty
---import Test.Tasty.HUnit
-
+import Test.Tasty
+import Test.Tasty.HUnit
+import qualified Data.Aeson as A
 import AgileKeychain
 
 main :: IO ()
-main = do
-  key <- readKeychain "demo.agilekeychain" "demo"
-  case key of
-    Just x -> putStrLn "GOOD"
-    Nothing -> putStrLn "BAD"
+main = do -- defaultMain $
+  -- testCase "Raw Key Decoder" $ do
+    let myEncData = "U2FsdGVkX18se9ET2syAK2TEsRnmZtHq2mSad4W1egtnrLpaYtVdtqGv6ZWVwRb0h\\/6Lt7FgHDhe0dG6qmOzWi8r0\\/6RBuC62RNmjBCYs8lolcYEFGIaECyKSIp+UfsPJWmGTViV0JBElphOPWkEEzUhHK4rsifQ2OthQ7cirRYnVDfl9NtUUEw1a3fdImjN63svEK+OiGdCReOrdaS\\/3s8rhDq9EkSSPmSu0BXz8tD8EFxN5mAww+EOjvRlrcNC825SKbpQZTq61loNEX2hf54hIg+Xr45xSUHueeoSDBX2RGCliW\\/0ejiQAykOtWfQOZf6lbp8OTTat6AQNki1\\/4WM0AEKsBOrQax7rn9G4LHOvsQeK88XQGHfJeQDR1NYLHSOReUkbKEF7KTOWp5ycqXvcgtj5ozyMLKhNCJ7a98ZY002EkgdGVZtlmgDRuqkWqDxeB8fmjLkO6EzlfK6VwgKAb0+2A5In8eUnNAvByhBm3Pz07B4A5sLCth9\\/Wiq7uOkA2Bjc2lps25C1bwyIpksJ9Z3Gxv5OvoClF3yEhKctopBdN5Qbgsp+CSsspLum9M2P\\/06gzJ7xIv7BYfVLRc8U79zF4XjY9h0i1GJD04x4eMwhpRsOhmwYnDxECplHRevkwIYSZrRFnpg\\/1w5apO8Ptj+cFtF3cJTLLo9GPFMj2c\\/tBxCw2PG7fZmBxkXhBC9Y8+LatxuCni\\/Zl61b2BWWpAAtZ7oersVCWun5q+StiJEeOdGlFYdv9j4jBxbWcU\\/O1vvW4CcQ2LUynwZy7k0HDu\\/jbdI4ezyE9Vo0RK1CAbuVCHtI0FiOCMI1dbGpB\\/smprroryRBDjuerEZT7n+oyk0sQDag5HAZntPDAFYF3+weKsAvag64afVR2UL5t2jsEQlwPUuxo\\/crNC2l7qxzoGBy5N+J9\\/TL+9gZCrOFAqDJNpFBUQzWVZzdPBsb6kp+WmsiiAsYx6dWPH\\/B7lGe2JpRLMfxBG1boynXchbWzFa6L+zn\\/3HyHcqttALNFkuCD88TA7EUrh4zJWr3SvaBvGHc\\/7dVLJtGyiVGNxVccXLSjd9nFsxlS9jqH3h6DfsBUWlb\\/mTeWFYBD4eq4CWY1rhG9MzDHUQMLOAzUt6QKDqN7TmVV+JUqwe7m6DhapbEpmbOcKUnm7MhcAz4WckwtmD5GlNh5QNU6p7Dom6mBlfV9ZHwkEeG1\\/b0J9QUTa3o4wGZQQuM\\/+LQKgQbrQCEEP8Rs\\/VDppcgkzHR7C\\/G1OlypPBy2Ht0nAtMbcIFmjANtUVjz8zwkGFhLEhhfGqA5u5uugozubnWkn2r+X0QO7sjLWT+u4oNrs5GqFyEwpWQ1ndwMplm0UZICTGDVsCJYKoxqFFuCDaqUZ4LIUJAxT4CbreiIM0I1SYe0Sm\",\"validation\":\"U2FsdGVkX1+CNSntRQ9fLtk3hd\\/\\/ti+wv2f8p00xhzElOjFtpsJavqeHv5HJj3mXTL3\\/\\/IswKTe9KEBR69fEsv81FSea2FXrD4UnTaJdIy3Q2Z+FmT\\/XtDt\\/nRRcwSxicwPkEhPfl92tmHogJlFZ1a2mNrjBfMHvD5JxBGYkKrtW1IqiIbCzzRBfGXvejDyo9WjuU4d+yxiQFIpNXqC1FoBztjfSDvbVAWNB24nk\\/vfMYPI\\/b7zeCrYJY74ExN+IaBu8zYGe7yh+jSBVURPI\\/22sHL0oOQ04gsk9ZdyaD3tXLj3uFgCwaRPGZCK4RKfsxDWYsDQHwVrR4Q6ZadaiJJIiZwGyIMMrAqjW0wcPPAJopxDhZ20L5qHxVcUIAvFj\\/brSsokmiwcFddfNm4KbsLqlN6jKG\\/ugGnNK+IqbAIziGZOgwW9Xhf0CNAM9dBBGO99eOSa\\/Y67VWPyhl9bezFtcAtbJae9msyBt8tvhVcRLsEkAYNqGTwA8fGEdeCNHsm8lw3DNzj3Pg7LQm+Av5EtWx\\/TYTV87czdLDbA1lR9i6adrnAX0BgtiU3cDWalR02annys0aopz6JpPszqyp6bhCx5il4IWlA5ntoJiAy9adCBDGaFkGwG1dbP2HY738AUiieusg3AT9Quc4\\/9T2AHAT3taKtCTPDfRk+Rtr0SiWZrsXebo+H2gk9VR5gQnGGdmwrYPFYQJDjurQO9wVjmNb0gcXpKHzz863c2fapmgEL8fRCpxKmMDw1pFZsLmooIrAgvP0XmTEyL9WJG0rsOaLAaCDNnXVDMzVM\\/p5TP2jjJkigp1\\/pZMmfk0lYw5inEmqdlMxSMxq7aAIU8NuYtjaoKV+NFbJ5LdhbbENANEcK6Itq\\/yG5pyyDKx9zV+xhlahFLwFVgHJBVlMp+3Gi3\\/RVLkX71SKZm90URvcN0aOJNGGoZZDpQ5K9SUcPupg4rd\\/Y8QKpG5WHjoxMKyhn6btMwT6TnELX\\/8pXqITE4bTjW0avL0SjKHv7PYzp0LhMIMfOVFDYqT3wJtnPnTeeEb9UZWJ33A2a0uOG9XHIf6G4Oj\\/S\\/0N2JuZCCTuucTN4axvdpuFZXjPsojfCsjVwQxLLaRyRSNHfZTK\\/V11HjDVZGqLZDGRsHZx3xBwT3Owy3oAkq6Iu2H4hP8wR0PDMfsBkslOOoFndorY2R660vAfdjoDWPMYQGPw19Apm4ADmxYjSDBXpTjpCD+O9pBqCmFo8MdBQw1W5kJ5WEShHftucOKnNMoj1W0FKWnQEeOzBvsXdmHlep4eTHMSSHyavjfYizGl0hAjk8YjyUjkib7ySdbi\\/v+8JwUIN+W0slwgTyx6IBHrqYkXBzzcBzQg1sFIoeeA+V7cgdSVf7T5AX2CS44ulnOoYYb\\/trjerPl"
+
+    print $ decodeEncData myEncData
+
+    let rawKey1 = "{\"data\":\"U2FsdGVkX18se9ET2syAK2TEsRnmZtHq2mSad4W1egtnrLpaYtVdtqGv6ZWVwRb0h\\/6Lt7FgHDhe0dG6qmOzWi8r0\\/6RBuC62RNmjBCYs8lolcYEFGIaECyKSIp+UfsPJWmGTViV0JBElphOPWkEEzUhHK4rsifQ2OthQ7cirRYnVDfl9NtUUEw1a3fdImjN63svEK+OiGdCReOrdaS\\/3s8rhDq9EkSSPmSu0BXz8tD8EFxN5mAww+EOjvRlrcNC825SKbpQZTq61loNEX2hf54hIg+Xr45xSUHueeoSDBX2RGCliW\\/0ejiQAykOtWfQOZf6lbp8OTTat6AQNki1\\/4WM0AEKsBOrQax7rn9G4LHOvsQeK88XQGHfJeQDR1NYLHSOReUkbKEF7KTOWp5ycqXvcgtj5ozyMLKhNCJ7a98ZY002EkgdGVZtlmgDRuqkWqDxeB8fmjLkO6EzlfK6VwgKAb0+2A5In8eUnNAvByhBm3Pz07B4A5sLCth9\\/Wiq7uOkA2Bjc2lps25C1bwyIpksJ9Z3Gxv5OvoClF3yEhKctopBdN5Qbgsp+CSsspLum9M2P\\/06gzJ7xIv7BYfVLRc8U79zF4XjY9h0i1GJD04x4eMwhpRsOhmwYnDxECplHRevkwIYSZrRFnpg\\/1w5apO8Ptj+cFtF3cJTLLo9GPFMj2c\\/tBxCw2PG7fZmBxkXhBC9Y8+LatxuCni\\/Zl61b2BWWpAAtZ7oersVCWun5q+StiJEeOdGlFYdv9j4jBxbWcU\\/O1vvW4CcQ2LUynwZy7k0HDu\\/jbdI4ezyE9Vo0RK1CAbuVCHtI0FiOCMI1dbGpB\\/smprroryRBDjuerEZT7n+oyk0sQDag5HAZntPDAFYF3+weKsAvag64afVR2UL5t2jsEQlwPUuxo\\/crNC2l7qxzoGBy5N+J9\\/TL+9gZCrOFAqDJNpFBUQzWVZzdPBsb6kp+WmsiiAsYx6dWPH\\/B7lGe2JpRLMfxBG1boynXchbWzFa6L+zn\\/3HyHcqttALNFkuCD88TA7EUrh4zJWr3SvaBvGHc\\/7dVLJtGyiVGNxVccXLSjd9nFsxlS9jqH3h6DfsBUWlb\\/mTeWFYBD4eq4CWY1rhG9MzDHUQMLOAzUt6QKDqN7TmVV+JUqwe7m6DhapbEpmbOcKUnm7MhcAz4WckwtmD5GlNh5QNU6p7Dom6mBlfV9ZHwkEeG1\\/b0J9QUTa3o4wGZQQuM\\/+LQKgQbrQCEEP8Rs\\/VDppcgkzHR7C\\/G1OlypPBy2Ht0nAtMbcIFmjANtUVjz8zwkGFhLEhhfGqA5u5uugozubnWkn2r+X0QO7sjLWT+u4oNrs5GqFyEwpWQ1ndwMplm0UZICTGDVsCJYKoxqFFuCDaqUZ4LIUJAxT4CbreiIM0I1SYe0Sm\",\"validation\":\"U2FsdGVkX1+CNSntRQ9fLtk3hd\\/\\/ti+wv2f8p00xhzElOjFtpsJavqeHv5HJj3mXTL3\\/\\/IswKTe9KEBR69fEsv81FSea2FXrD4UnTaJdIy3Q2Z+FmT\\/XtDt\\/nRRcwSxicwPkEhPfl92tmHogJlFZ1a2mNrjBfMHvD5JxBGYkKrtW1IqiIbCzzRBfGXvejDyo9WjuU4d+yxiQFIpNXqC1FoBztjfSDvbVAWNB24nk\\/vfMYPI\\/b7zeCrYJY74ExN+IaBu8zYGe7yh+jSBVURPI\\/22sHL0oOQ04gsk9ZdyaD3tXLj3uFgCwaRPGZCK4RKfsxDWYsDQHwVrR4Q6ZadaiJJIiZwGyIMMrAqjW0wcPPAJopxDhZ20L5qHxVcUIAvFj\\/brSsokmiwcFddfNm4KbsLqlN6jKG\\/ugGnNK+IqbAIziGZOgwW9Xhf0CNAM9dBBGO99eOSa\\/Y67VWPyhl9bezFtcAtbJae9msyBt8tvhVcRLsEkAYNqGTwA8fGEdeCNHsm8lw3DNzj3Pg7LQm+Av5EtWx\\/TYTV87czdLDbA1lR9i6adrnAX0BgtiU3cDWalR02annys0aopz6JpPszqyp6bhCx5il4IWlA5ntoJiAy9adCBDGaFkGwG1dbP2HY738AUiieusg3AT9Quc4\\/9T2AHAT3taKtCTPDfRk+Rtr0SiWZrsXebo+H2gk9VR5gQnGGdmwrYPFYQJDjurQO9wVjmNb0gcXpKHzz863c2fapmgEL8fRCpxKmMDw1pFZsLmooIrAgvP0XmTEyL9WJG0rsOaLAaCDNnXVDMzVM\\/p5TP2jjJkigp1\\/pZMmfk0lYw5inEmqdlMxSMxq7aAIU8NuYtjaoKV+NFbJ5LdhbbENANEcK6Itq\\/yG5pyyDKx9zV+xhlahFLwFVgHJBVlMp+3Gi3\\/RVLkX71SKZm90URvcN0aOJNGGoZZDpQ5K9SUcPupg4rd\\/Y8QKpG5WHjoxMKyhn6btMwT6TnELX\\/8pXqITE4bTjW0avL0SjKHv7PYzp0LhMIMfOVFDYqT3wJtnPnTeeEb9UZWJ33A2a0uOG9XHIf6G4Oj\\/S\\/0N2JuZCCTuucTN4axvdpuFZXjPsojfCsjVwQxLLaRyRSNHfZTK\\/V11HjDVZGqLZDGRsHZx3xBwT3Owy3oAkq6Iu2H4hP8wR0PDMfsBkslOOoFndorY2R660vAfdjoDWPMYQGPw19Apm4ADmxYjSDBXpTjpCD+O9pBqCmFo8MdBQw1W5kJ5WEShHftucOKnNMoj1W0FKWnQEeOzBvsXdmHlep4eTHMSSHyavjfYizGl0hAjk8YjyUjkib7ySdbi\\/v+8JwUIN+W0slwgTyx6IBHrqYkXBzzcBzQg1sFIoeeA+V7cgdSVf7T5AX2CS44ulnOoYYb\\/trjerPl\",\"level\":\"SL3\",\"identifier\":\"8AD42DD06B79476CB56AD44EB0868870\",\"iterations\":100000}"
+
+--    A.decode rawKey1 @=? Just
+    case A.decode rawKey1 :: Maybe RawKey of
+      Nothing -> putStrLn  "FAIL"
+      Just x -> putStrLn  "GOOD"
+
+    key <- readKeychain "demo.agilekeychain" "demo"
+    case key of
+      Just x -> putStrLn "GOOD"
+      Nothing -> putStrLn "BAD"
