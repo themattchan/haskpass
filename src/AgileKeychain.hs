@@ -118,24 +118,24 @@ type Salt = B.ByteString
 type DecodedData = (Maybe Salt, B.ByteString)
 
 -- | A single undecrypted key entry in the list from 'encryptedKeys.js'
-data RawKey = RawKey
-  { rawKeyData       :: DecodedData
+data RawKey a = RawKey
+  { rawKeyData       :: a --DecodedData
   , rawKeyIdentifier :: String
-  , rawKeyValidation :: DecodedData
+  , rawKeyValidation :: a --DecodedData
   , rawKeyIterations :: Int
   , rawKeyLevel      :: KeyLevel
-  } deriving Show
+  } deriving (Show, Eq)
 
-instance A.FromJSON RawKey where
+instance A.FromJSON a => A.FromJSON (RawKey a) where
   parseJSON = A.withObject "get json object" $ \jsonObj -> do
-    rawKeyData       <- parseKeyData $ jsonObj .: "data"
+    rawKeyData       <- jsonObj .: "data"
     rawKeyIdentifier <- jsonObj .: "identifier"
-    rawKeyValidation <- parseKeyData $ jsonObj .: "validation"
+    rawKeyValidation <- jsonObj .: "validation"
     rawKeyIterations <- max 1000 <$> jsonObj .:? "iterations" .!= 0
     rawKeyLevel      <- jsonObj .: "level"
     return RawKey{..}
     where
-      parseKeyData = (>>= orFail errKeyData) . fmap (decodeEncData . B.pack)
+--      parseKeyData = (>>= orFail errKeyData) . fmap (decodeEncData . B.pack)
       errKeyData   = "bad key data"
 
   parseJSONList
@@ -146,13 +146,19 @@ instance A.FromJSON RawKey where
 -- * Keychain parsing
 --------------------------------------------------------------------------------
 
-readKeychain :: FilePath -> B.ByteString -> IO (Maybe AgileKeychain)
-readKeychain ak_vaultPath masterPass = runMaybeT $ do
-  liftIO $ putStrLn keychainFile
-  liftIO $ getCurrentDirectory  >>= putStrLn
-  rawJson <- MaybeT $ AP.maybeResult . AP.parse A.json <$> B.readFile keychainFile
-  raw :: [RawKey] <- MaybeT . return . A.parseMaybe A.parseJSONList $ rawJson
-  traceShowM raw
+vaultTitle :: String
+vaultTitle = "vault"
+
+keychainFile :: FilePath -> FilePath
+keychainFile ak_vaultPath = ak_vaultPath </> "data/default/encryptionKeys.js"
+
+readKeychain :: B.ByteString -> B.ByteString -> Maybe AgileKeychain
+readKeychain keychainBS masterPass = do
+  -- liftIO $ putStrLn keychainFile
+  -- liftIO $ getCurrentDirectory  >>= putStrLn
+  rawJson <- AP.maybeResult $ AP.parse A.json keychainBS-- <$> B.readFile keychainFile
+  raw :: [RawKey String] <- A.parseMaybe A.parseJSONList rawJson
+--  traceShowM raw
   return undefined
 --   $ rawEncryptionKeysJs
 
@@ -169,8 +175,6 @@ readKeychain ak_vaultPath masterPass = runMaybeT $ do
 --       return Nothing
 
   where
-    ak_vaultTitle = "vault"
-    keychainFile = ak_vaultPath </> "data/default/encryptionKeys.js"
 
 decodeEncData :: B.ByteString -> Maybe DecodedData
 decodeEncData dat
@@ -182,7 +186,7 @@ decodeEncData dat
     hasSalt = "Salted__" `B.isPrefixOf` decoded
     salt    = (B.take 8 . B.drop 8) decoded
 
-decryptRawKeyData :: B.ByteString -> RawKey
+decryptRawKeyData :: B.ByteString -> RawKey DecodedData
                   -> IO (M.Map KeyLevel AgileKeychainMasterKey)
 decryptRawKeyData masterPass RawKey{..} = SSL.withOpenSSL $ do
   Just aes128cbc  <- SSL.getCipherByName "aes-128-cbc"
